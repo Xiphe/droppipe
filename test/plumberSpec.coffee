@@ -22,6 +22,7 @@ describe 'Plumber', ->
     changeQueue = []
     fakeDropboxClient =
       delta: ->
+      credentials: ->
     database = {}
     databaseAdapter = new idkeyvalue.ObjectAdapter database
     fakeLogger =
@@ -46,9 +47,11 @@ describe 'Plumber', ->
         fakeLogger.log.should.have.been.calledWith myLogOutput
 
       it 'should do a dropbox delta call when started', (done) ->
-        sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, 'fail'
+        myError = new Error 'fail'
+        sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, myError
 
-        plumberFactory().start ->
+        plumberFactory().start (err) ->
+          return done err if err && err != myError
           fakeDropboxClient.delta.should.have.been.called
           done()
 
@@ -65,16 +68,19 @@ describe 'Plumber', ->
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, cursorTag: myCursorTag
         sinon.spy(databaseAdapter, 'set')
 
-        plumberFactory().start ->
+        plumberFactory().start (err) ->
+          return done err if err
           databaseAdapter.set.should.have.been.calledWith Plumber.CONSTANTS.CURSOR_TAG_KEY, myCursorTag
           done()
 
       it 'should call delta with a cursor when present', (done) ->
+        myError = new Error 'fail'
         myStoredCursorTag = 'xyz'
         databaseAdapter.set Plumber.CONSTANTS.CURSOR_TAG_KEY, myStoredCursorTag, ->
-          sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, 'fail'
+          sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, myError
 
-          plumberFactory().start ->
+          plumberFactory().start (err) ->
+            return done err if err && err != myError
             fakeDropboxClient.delta.getCall(0).args[0].cursorTag.should.equal myStoredCursorTag
             done()
 
@@ -92,7 +98,8 @@ describe 'Plumber', ->
         myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md'}]
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
 
-        plumberFactory().start ->
+        plumberFactory().start (err) ->
+          return done err if err
           changeQueue.push.should.have.been.calledTwice
           changeQueue.push.getCall(0).args[0].change.should.equal myChanges[0]
           changeQueue.push.getCall(1).args[0].change.should.equal myChanges[1]
@@ -107,7 +114,9 @@ describe 'Plumber', ->
 
         sinon.spy plumber, 'start'
 
-        plumber.start ->
+        plumber.start (err) ->
+          return done err if err
           plumber.start.should.have.been.calledTwice
           done()
+
 

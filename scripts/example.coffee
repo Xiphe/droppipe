@@ -18,7 +18,7 @@ Pipeline = require('../src/index').Pipeline
 idkeyvalue = require 'idkeyvalue'
 express = require 'express'
 path = require 'path'
-pipelinefile = path.join __dirname, 'pipelinefile'
+pipes = require './pipes'
 
 credentials =
   key: APP_KEY
@@ -29,7 +29,7 @@ databaseAdapter = new idkeyvalue.ObjectAdapter database, USER_ID
 expressDropboxOAuth = new ExpressDropboxOAuth credentials, databaseAdapter
 app = express()
 
-pipeline = new Pipeline
+pipeline = new Pipeline pipes: pipes, DropboxClient: ExpressDropboxOAuth.Dropbox.Client
 pipeline.start()
 
 #* ROUTES
