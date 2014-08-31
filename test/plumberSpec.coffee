@@ -1,20 +1,34 @@
 describe 'Plumber', ->
-  proxyquire = require 'proxyquire'
+  _ = require 'lodash'
   idkeyvalue = require 'idkeyvalue'
-  taskmanStub = {}
-  Plumber = proxyquire './../src/Plumber', 'node-taskman': taskmanStub
+  Plumber = require './../src/Plumber'
   database = null
   databaseAdapter = null
   fakeDropboxClient = null
+  fakeLogger = null
+  changeQueue = null
+
+  plumberFactory = (customConfig = {}) ->
+    defaults =
+      dropboxClient: fakeDropboxClient
+      database: databaseAdapter
+      logger: fakeLogger
+      pipeline: queue: changeQueue
+
+    config = _.merge defaults, customConfig
+    new Plumber config
 
   beforeEach ->
+    changeQueue = []
     fakeDropboxClient =
       delta: ->
     database = {}
     databaseAdapter = new idkeyvalue.ObjectAdapter database
+    fakeLogger =
+      log: sinon.spy()
 
   it 'should exist', ->
-    plumber = new Plumber dropboxClient: fakeDropboxClient
+    plumber = plumberFactory()
     plumber.should.exist
 
   describe 'dropbox', ->
@@ -23,25 +37,18 @@ describe 'Plumber', ->
       plumber.dropboxClient.should.equal fakeDropboxClient
 
     describe 'get delta', ->
-      it 'should take an optional logger', ->
-        myLogger =
-          log: sinon.spy()
-
+      it 'should use a given logger', ->
         myLogOutput = 'hello log'
 
-        plumber = new Plumber logger: myLogger
-        plumber.log.log myLogOutput
+        plumber = plumberFactory()
+        plumber.logger.log myLogOutput
 
-        myLogger.log.should.have.been.calledWith myLogOutput
+        fakeLogger.log.should.have.been.calledWith myLogOutput
 
       it 'should do a dropbox delta call when started', (done) ->
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, 'fail'
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
-
-        plumber.start ->
+        plumberFactory().start ->
           fakeDropboxClient.delta.should.have.been.called
           done()
 
@@ -49,11 +56,7 @@ describe 'Plumber', ->
         myError = new Error 'Foo is Bar'
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, myError
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
-
-        plumber.start (err) ->
+        plumberFactory().start (err) ->
           myError.should.equal err
           done()
 
@@ -62,11 +65,7 @@ describe 'Plumber', ->
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, cursorTag: myCursorTag
         sinon.spy(databaseAdapter, 'set')
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
-
-        plumber.start ->
+        plumberFactory().start ->
           databaseAdapter.set.should.have.been.calledWith Plumber.CONSTANTS.CURSOR_TAG_KEY, myCursorTag
           done()
 
@@ -75,11 +74,7 @@ describe 'Plumber', ->
         databaseAdapter.set Plumber.CONSTANTS.CURSOR_TAG_KEY, myStoredCursorTag, ->
           sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, 'fail'
 
-          plumber = new Plumber
-            dropboxClient: fakeDropboxClient
-            database: databaseAdapter
-
-          plumber.start ->
+          plumberFactory().start ->
             fakeDropboxClient.delta.getCall(0).args[0].cursorTag.should.equal myStoredCursorTag
             done()
 
@@ -88,31 +83,19 @@ describe 'Plumber', ->
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, cursorTag: 'baz'
         sinon.stub(databaseAdapter, 'set').callsArgWithAsync 2, myError
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
-
-        plumber.start (err) ->
+        plumberFactory().start (err) ->
           myError.should.equal err
           done()
 
       it 'should queue delta changes to taskman', (done) ->
-        fakeQueue = [];
-        sinon.spy fakeQueue, 'push'
-        taskmanStub.createQueue = sinon.stub().returns fakeQueue
+        sinon.spy changeQueue, 'push'
         myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md'}]
-
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
-
-        plumber.start ->
-          taskmanStub.createQueue.should.have.been.calledWith Plumber.CONSTANTS.FILE_PROCESSOR_WORKER_ID
-          fakeQueue.push.should.have.been.calledTwice
-          fakeQueue.push.getCall(0).args[0].change.should.equal myChanges[0]
-          fakeQueue.push.getCall(1).args[0].change.should.equal myChanges[1]
+        plumberFactory().start ->
+          changeQueue.push.should.have.been.calledTwice
+          changeQueue.push.getCall(0).args[0].change.should.equal myChanges[0]
+          changeQueue.push.getCall(1).args[0].change.should.equal myChanges[1]
           done()
 
       it 'should pull again if told so', (done) ->
@@ -120,9 +103,7 @@ describe 'Plumber', ->
           .onCall(0).callsArgWithAsync 1, null, {cursorTag: 'foo', shouldPullAgain: true}
           .onCall(1).callsArgWithAsync 1, null, {cursorTag: 'baz', shouldPullAgain: false}
 
-        plumber = new Plumber
-          dropboxClient: fakeDropboxClient
-          database: databaseAdapter
+        plumber = plumberFactory()
 
         sinon.spy plumber, 'start'
 

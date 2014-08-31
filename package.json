@@ -19,7 +19,8 @@
     "express-dropbox-oauth": "0.0.5",
     "express": "~4.8.6",
     "minimist": "~1.1.0",
-    "proxyquire": "~1.0.1"
+    "proxyquire": "~1.0.1",
+    "lodash": "~2.4.1"
   },
   "dependencies": {
     "node-taskman": "~1.0.3",

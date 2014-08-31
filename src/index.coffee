@@ -1,1 +1,3 @@
-module.exports = require './Plumber'
+module.exports =
+  Plumber: require './Plumber'
+  Pipeline: require './Pipeline'

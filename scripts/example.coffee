@@ -13,9 +13,12 @@ SERVER_PORT = argv.port || 3000
 #***********
 
 ExpressDropboxOAuth = require 'express-dropbox-oauth'
-Plumber = require '../src/index'
+Plumber = require('../src/index').Plumber
+Pipeline = require('../src/index').Pipeline
 idkeyvalue = require 'idkeyvalue'
 express = require 'express'
+path = require 'path'
+pipelinefile = path.join __dirname, 'pipelinefile'
 
 credentials =
   key: APP_KEY
@@ -26,8 +29,8 @@ databaseAdapter = new idkeyvalue.ObjectAdapter database, USER_ID
 expressDropboxOAuth = new ExpressDropboxOAuth credentials, databaseAdapter
 app = express()
 
-
-Plumber.startworker()
+pipeline = new Pipeline
+pipeline.start()
 
 #* ROUTES
 #********
@@ -46,7 +49,7 @@ app.get '/auth', expressDropboxOAuth.doAuth(unauthRoute), (req, res) ->
   res.redirect '/'
 
 app.get '/plumber', expressDropboxOAuth.checkAuth(unauthRoute), (req, res) ->
-  plumber = new Plumber dropboxClient: expressDropboxOAuth.dropboxClient, database: databaseAdapter
+  plumber = new Plumber dropboxClient: expressDropboxOAuth.dropboxClient, database: databaseAdapter, pipeline: pipeline
   plumber.start (err) ->
     if err
       console.error err
