@@ -1,0 +1,28 @@
+{
+  "name": "dropbox-plumber",
+  "version": "0.0.0",
+  "description": "Plumber for Dropbox to gulp",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "mocha --compilers coffee:coffee-script/register -R spec",
+    "watch": "mocha --compilers coffee:coffee-script/register --watch -R spec"
+  },
+  "author": "Hannes Diercks <dropbox-plumber@xiphe.net>",
+  "license": "MIT",
+  "devDependencies": {
+    "coffee-script": "~1.7.1",
+    "mocha": "~1.20.1",
+    "sinon": "~1.10.2",
+    "chai": "~1.9.1",
+    "sinon-chai": "~2.5.0",
+    "idkeyvalue": "0.0.3",
+    "express-dropbox-oauth": "0.0.5",
+    "express": "~4.8.6",
+    "minimist": "~1.1.0",
+    "proxyquire": "~1.0.1"
+  },
+  "dependencies": {
+    "node-taskman": "~1.0.3",
+    "q": "~1.0.1"
+  }
+}
