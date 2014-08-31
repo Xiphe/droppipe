@@ -1,13 +1,13 @@
 {
-  "name": "dropbox-plumber",
+  "name": "droppipe",
   "version": "0.0.0",
-  "description": "Plumber for Dropbox to gulp",
+  "description": "Pipe Dropbox Delta changes to gulp",
   "main": "lib/index.js",
   "scripts": {
     "test": "mocha --compilers coffee:coffee-script/register -R spec",
     "watch": "mocha --compilers coffee:coffee-script/register --watch -R spec"
   },
-  "author": "Hannes Diercks <dropbox-plumber@xiphe.net>",
+  "author": "Hannes Diercks <droppipe@xiphe.net>",
   "license": "MIT",
   "devDependencies": {
     "coffee-script": "~1.7.1",

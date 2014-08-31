@@ -1,7 +1,7 @@
-Dropbox Plumber
-===============
+Droppipe
+========
 
-Pipe dropbox changes to gulp.
+Pipe Dropbox Delta changes to gulp
 
 
 IN DEVELOPMENT
