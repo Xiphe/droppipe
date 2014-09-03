@@ -1,4 +1,4 @@
-taskman = require 'node-taskman'
+kue = require 'kue'
 minimatch = require 'minimatch'
 stream = require 'stream'
 gutil = require "gulp-util"
@@ -9,7 +9,7 @@ PREFIX = 'dropbox-plumber-'
 
 ### @const ###
 CONSTANTS =
-  FILE_PROCESSOR_WORKER_ID: PREFIX + 'file-processor'
+  FILE_PROCESSOR_JOB_ID: PREFIX + 'file-processor'
   PIPE_IN: 'in'
   PIPE_OUT: 'out'
 
@@ -18,32 +18,35 @@ class Pipeline
     @pipes = config.pipes
     @logger = config.logger || console
     @dropboxClient = config.dropboxClient
-    @queue = taskman.createQueue CONSTANTS.FILE_PROCESSOR_WORKER_ID
+    @jobFailureAttempts = config.jobFailureAttempts || 5
+    @jobs = kue.createQueue()
+    @queuedJobs = 0
 
   start: ->
-    worker = taskman.createWorker CONSTANTS.FILE_PROCESSOR_WORKER_ID
-    worker.process @preprocessor
-    @logger.log "Worker started."
+    @jobs.process CONSTANTS.FILE_PROCESSOR_JOB_ID, @preprocessor
+    @logger.log "Job processor started."
 
-  preprocessor: (changeObjs, done) =>
-    queue = []
+  addJob: (data) ->
+    job = @jobs.create(CONSTANTS.FILE_PROCESSOR_JOB_ID, data).attempts(@jobFailureAttempts).save (err) =>
+      return @logger.error "Failed to create job##{job.id} - #{err}" if err
+      @logger.log "Created job##{job.id}"
+      @queuedJobs += 1
 
-    changeObjs.forEach (changeObj) =>
-      change = changeObj.change
 
-      processingPromise = @process change
-      processingPromise.catch (err) =>
-        @logger.error "Error while processing #{change.path}: #{err}"
-      processingPromise.then =>
-        @logger.log "Finished processing #{change.path}"
+  preprocessor: (job, done) =>
+    change = job.data.change
 
-      queue.push processingPromise
+    processingPromise = @process change
+    processingPromise.catch (err) =>
+      @logger.error "Error while processing job##{job.id}('#{change.path}'): #{err}"
+    processingPromise.then =>
+      @logger.log "Finished processing job##{job.id}('#{change.path}')"
 
-    processingPromise = Q.all queue
     processingPromise.nodeify done
     return processingPromise
 
   toGulpFileStream: (change) =>
+    @logger.log "Fetch '#{change.path}' from dropbox."
     Q.ninvoke @dropboxClient, 'readFile', change.path, buffer: true
       .then (result) ->
         meta = result[1]
@@ -59,9 +62,10 @@ class Pipeline
         return src
 
   process: (change) =>
-    relativePath = change.path.replace /^\//, ''
+    changePath = change.path
+    relativePath = changePath.replace /^\//, ''
     direction = if change.wasRemoved then CONSTANTS.PIPE_OUT else CONSTANTS.PIPE_IN
-    @logger.log "Processing '#{relativePath}' -> #{direction}."
+    @logger.log "Start processing '#{relativePath}' -> #{direction}."
 
     pipe = false
     pipeMatcher = null
@@ -72,11 +76,12 @@ class Pipeline
         pipe = p
 
     if pipe
-      @logger.log "piping '#{change.path}' #{if CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
       Q.fcall => if direction == CONSTANTS.PIPE_IN then @toGulpFileStream change else relativePath
-        .then (change) => Q.nfcall pipe, change
+        .then (change) =>
+          @logger.log "Pipe '#{changePath}' #{if CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
+          Q.nfcall pipe, change
     else
-      @logger.log "No pipes found for '#{change.path}'."
+      @logger.warn "No pipes found for '#{change.path}'."
       Q.when true
 
 

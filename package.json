@@ -24,9 +24,9 @@
     "gulp": "~3.8.7"
   },
   "dependencies": {
-    "node-taskman": "~1.0.3",
     "q": "~1.0.1",
     "minimatch": "~1.0.0",
-    "gulp-util": "~3.0.1"
+    "gulp-util": "~3.0.1",
+    "kue": "~0.8.6"
   }
 }
