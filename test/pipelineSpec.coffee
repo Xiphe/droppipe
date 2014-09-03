@@ -53,6 +53,10 @@ describe 'Pipeline', ->
         pipeline.process.getCall(1).args[0].should.equal someChanges[1].change
         done()
 
+    it 'should notify the done pipes when finished', ->
+       'implemented'.should.equal true
+
+
   describe 'process', ->
     inPipeStub = null
     outPipeStub = null
@@ -143,3 +147,10 @@ describe 'Pipeline', ->
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()
       .catch done
+
+  describe 'Error handling', ->
+    it 'should not get try to read folders', ->
+      'implemented'.should.equal true
+
+    it 'should retry operations on fail', ->
+      'implemented'.should.equal true
