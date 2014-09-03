@@ -35,7 +35,7 @@ class Plumber
       return  @logger.log "no delta changes."
 
     changes.forEach (change) =>
-      @pipeline.queue.push change: change, dropboxCredentials: @dropboxClient.credentials()
+      @pipeline.queue.push change: change
       @logger.log "Queued #{if change.wasRemoved then 'removing' else 'update'} of '#{change.path}'."
 
 Plumber.CONSTANTS = CONSTANTS

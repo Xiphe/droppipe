@@ -115,20 +115,20 @@ describe 'Pipeline', ->
 
 
   describe 'toGulpFileStream', ->
-    DropboxClient = null
+    dropboxClient = null
     readFileStub = null
 
     beforeEach ->
       myContent = new Buffer 'Lorem Ipsum', 'utf-8'
       readFileStub = sinon.stub().callsArgWithAsync 2, null, [myContent, path: '/foo.bar']
 
-      DropboxClient = class FakeDbClient
+      dropboxClient =
         readFile: readFileStub
 
     it 'should request the files content from dropbox', (done) ->
       myChange = path: '/foo.bar'
 
-      pipelineFactory(DropboxClient: DropboxClient).toGulpFileStream(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient).toGulpFileStream(path: '/foo.bar').then ->
         readFileStub.should.have.been.called
         done()
       .catch done
@@ -138,7 +138,7 @@ describe 'Pipeline', ->
       pipes =
         in: '**': inPipeStub
 
-      pipelineFactory(DropboxClient: DropboxClient, pipes: pipes).process(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes).process(path: '/foo.bar').then ->
         inPipeStub.should.have.been.called
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()

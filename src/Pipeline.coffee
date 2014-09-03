@@ -17,7 +17,7 @@ class Pipeline
   constructor: (config = {}) ->
     @pipes = config.pipes
     @logger = config.logger || console
-    @DropboxClient = config.DropboxClient
+    @dropboxClient = config.dropboxClient
     @queue = taskman.createQueue CONSTANTS.FILE_PROCESSOR_WORKER_ID
 
   start: ->
@@ -30,9 +30,8 @@ class Pipeline
 
     changeObjs.forEach (changeObj) =>
       change = changeObj.change
-      dropboxCredentials = changeObj.dropboxCredentials
 
-      processingPromise = @process change, dropboxCredentials
+      processingPromise = @process change
       processingPromise.catch (err) =>
         @logger.error "Error while processing #{change.path}: #{err}"
       processingPromise.then =>
@@ -44,10 +43,8 @@ class Pipeline
     processingPromise.nodeify done
     return processingPromise
 
-  toGulpFileStream: (change, dropboxCredentials) =>
-    dropboxClient = new @DropboxClient dropboxCredentials
-
-    Q.ninvoke dropboxClient, 'readFile', change.path, buffer: true
+  toGulpFileStream: (change) =>
+    Q.ninvoke @dropboxClient, 'readFile', change.path, buffer: true
       .then (result) ->
         meta = result[1]
         contents = result[0]
@@ -61,7 +58,7 @@ class Pipeline
 
         return src
 
-  process: (change, dropboxCredentials) =>
+  process: (change) =>
     relativePath = change.path.replace /^\//, ''
     direction = if change.wasRemoved then CONSTANTS.PIPE_OUT else CONSTANTS.PIPE_IN
     @logger.log "Processing '#{relativePath}' -> #{direction}."
@@ -76,7 +73,7 @@ class Pipeline
 
     if pipe
       @logger.log "piping '#{change.path}' #{if CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
-      Q.fcall => if direction == CONSTANTS.PIPE_IN then @toGulpFileStream change, dropboxCredentials else relativePath
+      Q.fcall => if direction == CONSTANTS.PIPE_IN then @toGulpFileStream change else relativePath
         .then (change) => Q.nfcall pipe, change
     else
       @logger.log "No pipes found for '#{change.path}'."

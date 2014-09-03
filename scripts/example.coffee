@@ -24,13 +24,24 @@ credentials =
   key: APP_KEY
   secret: APP_SECRET
 
+# database = {}
 database = { global: { 'express-dropbox-auth-code': 'w-Cb5jKN4CcAAAAAAAAnQJhM-f-n1-l32MYa0U8Ywvm2Y4DtqFYqJLqXmjMEe4bH' } }
 databaseAdapter = new idkeyvalue.ObjectAdapter database, USER_ID
 expressDropboxOAuth = new ExpressDropboxOAuth credentials, databaseAdapter
 app = express()
 
-pipeline = new Pipeline pipes: pipes, DropboxClient: ExpressDropboxOAuth.Dropbox.Client
-pipeline.start()
+
+pipeline = false;
+startPipeline = (dropboxClient) ->
+  return pipeline if pipeline
+
+  pipeline = new Pipeline pipes: pipes, dropboxClient: dropboxClient
+  pipeline.start()
+
+  return pipeline
+
+expressDropboxOAuth.checkAuth(->) {}, {}, ->
+  startPipeline expressDropboxOAuth.dropboxClient
 
 #* ROUTES
 #********
@@ -49,7 +60,11 @@ app.get '/auth', expressDropboxOAuth.doAuth(unauthRoute), (req, res) ->
   res.redirect '/'
 
 app.get '/plumber', expressDropboxOAuth.checkAuth(unauthRoute), (req, res) ->
-  plumber = new Plumber dropboxClient: expressDropboxOAuth.dropboxClient, database: databaseAdapter, pipeline: pipeline
+  plumber = new Plumber({
+    dropboxClient: expressDropboxOAuth.dropboxClient,
+    database: databaseAdapter,
+    pipeline: startPipeline expressDropboxOAuth.dropboxClient
+  })
   plumber.start (err) ->
     if err
       console.error err
