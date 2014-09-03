@@ -13,7 +13,7 @@ describe 'Plumber', ->
       dropboxClient: fakeDropboxClient
       database: databaseAdapter
       logger: fakeLogger
-      pipeline: queue: changeQueue
+      pipeline: addJob: ->
 
     config = _.merge defaults, customConfig
     new Plumber config
@@ -27,6 +27,7 @@ describe 'Plumber', ->
     databaseAdapter = new idkeyvalue.ObjectAdapter database
     fakeLogger =
       log: sinon.spy()
+      warn: sinon.spy()
 
   it 'should exist', ->
     plumber = plumberFactory()
@@ -93,16 +94,20 @@ describe 'Plumber', ->
           myError.should.equal err
           done()
 
-      it 'should queue delta changes to taskman', (done) ->
-        sinon.spy changeQueue, 'push'
+      it 'should queue delta changes to kue', (done) ->
+        plumber = plumberFactory()
+        pipeline = plumber.pipeline
+
+        sinon.spy pipeline, 'addJob'
         myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md'}]
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
 
-        plumberFactory().start (err) ->
+
+        plumber.start (err) ->
           return done err if err
-          changeQueue.push.should.have.been.calledTwice
-          changeQueue.push.getCall(0).args[0].change.should.equal myChanges[0]
-          changeQueue.push.getCall(1).args[0].change.should.equal myChanges[1]
+          pipeline.addJob.should.have.been.calledTwice
+          pipeline.addJob.getCall(0).args[0].change.should.equal myChanges[0]
+          pipeline.addJob.getCall(1).args[0].change.should.equal myChanges[1]
           done()
 
       it 'should pull again if told so', (done) ->

@@ -2,10 +2,11 @@ describe 'Pipeline', ->
   proxyquire = require 'proxyquire'
   _ = require 'lodash'
   Q = require 'q'
-  taskmanStub = {}
-  Pipeline = proxyquire '../src/Pipeline', 'node-taskman': taskmanStub
+  kueStub = {}
+  Pipeline = proxyquire '../src/Pipeline', 'kue': kueStub
 
   fakeLogger = null
+  fakeJobs = null
 
   pipelineFactory = (customConfig = {}) ->
     defaults =
@@ -18,39 +19,45 @@ describe 'Pipeline', ->
   beforeEach ->
     fakeLogger =
       log: sinon.spy()
+      warn: sinon.spy()
+
+    fakeJobs =
+      create: -> fakeJobs
+      attempts: -> fakeJobs
+      process: -> fakeJobs
+      save: (done) -> done(); return fakeJobs
+
+    kueStub.createQueue = -> fakeJobs
 
   it 'should exist', ->
     pipelineFactory().should.exist
 
-  it 'should have a queue property, we can push on', ->
-    pipeline = pipelineFactory()
-    pipeline.queue.should.exist
-    pipeline.queue.push.should.be.an.instanceof Function
-
   describe 'start', ->
     it 'should start a taskman worker and register the preprocessor', ->
-      fakeWorker = process: sinon.spy()
-      taskmanStub.createWorker = sinon.stub().returns fakeWorker
+      sinon.spy kueStub, 'createQueue'
+      sinon.spy fakeJobs, 'process'
       pipeline = pipelineFactory()
       pipeline.start()
 
-      taskmanStub.createWorker.should.have.been.calledOnce
-      taskmanStub.createWorker.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_WORKER_ID
-      fakeWorker.process.should.have.been.calledOnce
-      fakeWorker.process.should.have.been.calledWith pipeline.preprocessor
+      kueStub.createQueue.should.have.been.calledOnce
+      fakeJobs.process.should.have.been.calledOnce
+      fakeJobs.process.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline.preprocessor
+
+  describe 'addJob', ->
+    it 'should add jobs to a queue', ->
+      'implemented'.should.equal true
 
   describe 'preprocessor', ->
     it 'should pass changes to process', (done) ->
       pipeline = pipelineFactory()
       sinon.stub(pipeline, 'process').returns Q.when true
 
-      someChanges = [{change: 'hello'}, {change: 'world'}]
+      fakeJob = data: change: 'hello'
 
-      pipeline.preprocessor someChanges, (err) ->
+      pipeline.preprocessor fakeJob, (err) ->
         return done(err) if err
-        pipeline.process.should.have.been.calledTwice
-        pipeline.process.getCall(0).args[0].should.equal someChanges[0].change
-        pipeline.process.getCall(1).args[0].should.equal someChanges[1].change
+        pipeline.process.should.have.been.calledOnce
+        pipeline.process.getCall(0).args[0].should.equal fakeJob.data.change
         done()
 
     it 'should notify the done pipes when finished', ->
