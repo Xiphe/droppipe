@@ -2,32 +2,48 @@ describe 'Pipeline', ->
   proxyquire = require 'proxyquire'
   _ = require 'lodash'
   Q = require 'q'
+  idkeyvalue = require 'idkeyvalue'
   kueStub = {}
   Pipeline = proxyquire '../src/Pipeline', 'kue': kueStub
 
   fakeLogger = null
   fakeJobs = null
+  database = null
+  job = null
+  databaseAdapter = null
+  fakeJobCount = 0
+
+  fakeJobFactory = ->
+    job =
+      id: fakeJobCount++
+      attempts: -> job
+      save: (done) -> done?(); return job
 
   pipelineFactory = (customConfig = {}) ->
     defaults =
       logger: fakeLogger
+      database: databaseAdapter
       dropboxClient: {}
 
     config = _.merge defaults, customConfig
     new Pipeline config
 
   beforeEach ->
+    fakeJobCount = 1
+
     fakeLogger =
-      log: sinon.spy()
-      warn: sinon.spy()
+      log: ->
+      warn: ->
+      error: ->
 
     fakeJobs =
-      create: -> fakeJobs
-      attempts: -> fakeJobs
-      process: -> fakeJobs
-      save: (done) -> done(); return fakeJobs
+      create: fakeJobFactory
+      process: ->
 
     kueStub.createQueue = -> fakeJobs
+
+    database = {}
+    databaseAdapter = new idkeyvalue.ObjectAdapter database
 
   it 'should exist', ->
     pipelineFactory().should.exist
@@ -44,8 +60,42 @@ describe 'Pipeline', ->
       fakeJobs.process.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline.preprocessor
 
   describe 'addJob', ->
-    it 'should add jobs to a queue', ->
-      'implemented'.should.equal true
+    it 'should add jobs to a queue', (done) ->
+      sinon.spy fakeJobs, 'create'
+      myData = foo: 'bar'
+
+      pipelineFactory().addJob(myData).finally ->
+        fakeJobs.create.should.have.been.calledOnce
+        fakeJobs.create.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, myData
+        done()
+
+    it 'should update the active job count in database', (done) ->
+      myPreviousCount = 7
+      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 2, null, myPreviousCount
+      sinon.spy(databaseAdapter, 'set')
+      myData = foo: 'bar'
+
+      pipelineFactory().addJob(myData).then ->
+        databaseAdapter.get.should.have.been.calledOnce
+        databaseAdapter.set.should.have.been.calledOnce
+        databaseAdapter.get.should.have.been.calledWith Pipeline.CONSTANTS.ACTIVE_JOBS_KEY
+        databaseAdapter.set.should.have.been.calledWith Pipeline.CONSTANTS.ACTIVE_JOBS_KEY, myPreviousCount + 1
+        done()
+      .catch done
+
+    it 'should log errors occurred during job creation', (done) ->
+      myError = new Error 'Lorem Ipsum'
+      myData = foo: 'bar'
+      sinon.stub(fakeJobs, 'create').throws myError
+      sinon.spy(fakeLogger, 'error')
+      error = null
+
+      pipeline = pipelineFactory()
+      pipeline.addJob(myData).finally ->
+        myError.should.equal.err
+        pipeline.logger.error.should.have.been.calledOnce
+        done()
+
 
   describe 'preprocessor', ->
     it 'should pass changes to process', (done) ->

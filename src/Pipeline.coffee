@@ -9,6 +9,7 @@ PREFIX = 'dropbox-plumber-'
 
 ### @const ###
 CONSTANTS =
+  ACTIVE_JOBS_KEY: PREFIX + 'active-jobs'
   FILE_PROCESSOR_JOB_ID: PREFIX + 'file-processor'
   PIPE_IN: 'in'
   PIPE_OUT: 'out'
@@ -17,6 +18,7 @@ class Pipeline
   constructor: (config = {}) ->
     @pipes = config.pipes
     @logger = config.logger || console
+    @database = config.database
     @dropboxClient = config.dropboxClient
     @jobFailureAttempts = config.jobFailureAttempts || 5
     @jobs = kue.createQueue()
@@ -26,11 +28,16 @@ class Pipeline
     @jobs.process CONSTANTS.FILE_PROCESSOR_JOB_ID, @preprocessor
     @logger.log "Job processor started."
 
-  addJob: (data) ->
-    job = @jobs.create(CONSTANTS.FILE_PROCESSOR_JOB_ID, data).attempts(@jobFailureAttempts).save (err) =>
-      return @logger.error "Failed to create job##{job.id} - #{err}" if err
-      @logger.log "Created job##{job.id}"
-      @queuedJobs += 1
+  addJob: (data, attempts = @jobFailureAttempts) ->
+    job = null
+
+    Q.invoke @jobs, 'create', CONSTANTS.FILE_PROCESSOR_JOB_ID, data
+      .then (_job) => job = _job; job.attempts(attempts)
+      .then => job.save()
+      .then => Q.ninvoke @database, 'get', CONSTANTS.ACTIVE_JOBS_KEY, true
+      .then (activeJobs) => Q.ninvoke @database, 'set', CONSTANTS.ACTIVE_JOBS_KEY, activeJobs + 1
+      .then => @logger.log "Created job##{job.id}"
+      .catch (err) => @logger.error "Failed to create job##{job?.id} - #{err}"
 
 
   preprocessor: (job, done) =>

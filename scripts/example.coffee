@@ -35,7 +35,7 @@ pipeline = false;
 startPipeline = (dropboxClient) ->
   return pipeline if pipeline
 
-  pipeline = new Pipeline pipes: pipes, dropboxClient: dropboxClient
+  pipeline = new Pipeline pipes: pipes, dropboxClient: dropboxClient, database: databaseAdapter
   pipeline.start()
 
   return pipeline
