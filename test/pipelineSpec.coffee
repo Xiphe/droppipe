@@ -181,14 +181,14 @@ describe 'Pipeline', ->
       return pipeline._process change
 
     it 'should put new changes the the in pipes', (done) ->
-      process(path: '/foo.bar').then ->
+      process(path: '/foo.bar', stat: {}).then ->
         inPipeStub.should.have.been.calledOnce
         done()
       .catch done
 
     it 'should put removed changes to the out pipe', (done) ->
       relativeFile = 'boo.far'
-      process(path: "/#{relativeFile}", wasRemoved: true).then ->
+      process(path: "/#{relativeFile}", wasRemoved: true, stat: {}).then ->
         outPipeStub.should.have.been.calledOnce
         outPipeStub.should.have.been.calledWith relativeFile
         done()
@@ -199,13 +199,13 @@ describe 'Pipeline', ->
       pipes =
         in: '*.coffee': coffeeSpy
 
-      process({path: '/asdf.js'}, pipes).then ->
+      process({path: '/asdf.js', stat: {}}, pipes).then ->
         coffeeSpy.should.not.have.been.called
         done()
       .catch done
 
     it 'should transform changes to gulp files', (done) ->
-      myChange = path: '/foo.bar'
+      myChange = path: '/foo.bar', stat: {}
       process(myChange).then ->
         pipeline._toGulpFileStream.should.have.been.calledOnce
         pipeline._toGulpFileStream.should.have.been.calledWith myChange
@@ -213,11 +213,21 @@ describe 'Pipeline', ->
       .catch done
 
     it 'should not transform out-changes to gulp files', (done) ->
-      myChange = path: '/foo.bar'
-      process(path: '/boo.far', wasRemoved: true).then ->
+      process(path: '/boo.far', wasRemoved: true, stat: {}).then ->
         pipeline._toGulpFileStream.should.not.have.been.calledOnce
         done()
       .catch done
+
+    it 'should not process folders', (done) ->
+      myChange =
+        path: '/foo/bar'
+        stat: is_dir: true
+
+      process(myChange).then ->
+        pipeline._toGulpFileStream.should.not.have.been.called
+        done()
+      .catch done
+
 
   describe '_toGulpFileStream', ->
     dropboxClient = null
@@ -233,9 +243,9 @@ describe 'Pipeline', ->
       sinon.stub(databaseAdapter, 'get').callsArgWithAsync 1, null, 99
 
     it 'should request the files content from dropbox', (done) ->
-      myChange = path: '/foo.bar'
+      myChange = path: '/foo.bar', stat: {}
 
-      pipelineFactory(dropboxClient: dropboxClient)._toGulpFileStream(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient)._toGulpFileStream(myChange).then ->
         readFileStub.should.have.been.called
         done()
       .catch done
@@ -245,15 +255,12 @@ describe 'Pipeline', ->
       pipes =
         in: '**': inPipeStub
 
-      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes)._process(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes)._process(path: '/foo.bar', stat: {}).then ->
         inPipeStub.should.have.been.called
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()
       .catch done
 
   describe 'Error handling', ->
-    it 'should not try to read folders', ->
-      'implemented'.should.equal true
-
     it 'should retry operations on fail', ->
       'implemented'.should.equal true

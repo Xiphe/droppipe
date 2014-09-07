@@ -65,6 +65,7 @@ class Pipeline
 
   _toGulpFileStream: (change) =>
     @logger.log "Fetch '#{change.path}' from dropbox."
+
     Q.ninvoke @dropboxClient, 'readFile', change.path, buffer: true
       .then (result) ->
         meta = result[1]
@@ -80,6 +81,8 @@ class Pipeline
         return src
 
   _process: (change) =>
+    return Q.when true if change.stat.is_dir
+
     changePath = change.path
     relativePath = changePath.replace /^\//, ''
     direction = if change.wasRemoved then CONSTANTS.PIPE_OUT else CONSTANTS.PIPE_IN
