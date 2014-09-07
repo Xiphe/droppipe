@@ -10,14 +10,21 @@ describe 'Pipeline', ->
   fakeJobs = null
   database = null
   job = null
+  jobs = null
   databaseAdapter = null
   fakeJobCount = 0
 
   fakeJobFactory = ->
     job =
+      events: {}
       id: fakeJobCount++
       attempts: -> job
       save: (done) -> done?(); return job
+      on: (key, callback) -> this.events[key] = callback; return job
+
+    jobs.push job
+
+    return job
 
   pipelineFactory = (customConfig = {}) ->
     defaults =
@@ -29,6 +36,8 @@ describe 'Pipeline', ->
     new Pipeline config
 
   beforeEach ->
+    job = null
+    jobs = []
     fakeJobCount = 1
 
     fakeLogger =
@@ -57,7 +66,7 @@ describe 'Pipeline', ->
 
       kueStub.createQueue.should.have.been.calledOnce
       fakeJobs.process.should.have.been.calledOnce
-      fakeJobs.process.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline.preprocessor
+      fakeJobs.process.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline._preprocessor
 
   describe 'addJob', ->
     it 'should add jobs to a queue', (done) ->
@@ -91,30 +100,65 @@ describe 'Pipeline', ->
       error = null
 
       pipeline = pipelineFactory()
-      pipeline.addJob(myData).finally ->
-        myError.should.equal.err
-        pipeline.logger.error.should.have.been.calledOnce
+
+      pipeline.addJob(myData).catch (err) ->
+        myError.should.equal err
+        fakeLogger.error.should.have.been.calledOnce
         done()
+        throw err
+      .then -> done new Error "promise resolved"
+      .catch (err) -> done err unless err == myError
 
 
-  describe 'preprocessor', ->
-    it 'should pass changes to process', (done) ->
+  describe '_preprocessor', ->
+    it 'should pass changes to _process', (done) ->
       pipeline = pipelineFactory()
-      sinon.stub(pipeline, 'process').returns Q.when true
+      sinon.stub(pipeline, '_process').returns Q.when true
 
       fakeJob = data: change: 'hello'
 
-      pipeline.preprocessor fakeJob, (err) ->
+      pipeline._preprocessor fakeJob, (err) ->
         return done(err) if err
-        pipeline.process.should.have.been.calledOnce
-        pipeline.process.getCall(0).args[0].should.equal fakeJob.data.change
+        pipeline._process.should.have.been.calledOnce
+        pipeline._process.getCall(0).args[0].should.equal fakeJob.data.change
         done()
 
-    it 'should notify the done pipes when finished', ->
-       'implemented'.should.equal true
+    it 'should notify the done pipes when finished', (done) ->
+      pipes =
+        done: sinon.spy()
+
+      pipeline = pipelineFactory pipes: pipes
+      sinon.stub(pipeline, '_process').returns Q.when true
+
+      pipeline.addJob change: 'hello'
+        .then ->
+          job.events.complete()
+          setTimeout ->
+            pipes.done.should.have.been.called
+            done()
+          , 0
+        .catch done
+
+    it 'should not notify the done pipes when not finished', (done) ->
+      pipes =
+        done: sinon.spy()
+
+      pipeline = pipelineFactory pipes: pipes
+      sinon.stub(pipeline, '_process').returns Q.when true
+
+      pipeline.addJob change: 'hello'
+        .then ->
+          pipeline.addJob change: 'world'
+            .then ->
+              job.events.complete()
+              setTimeout ->
+                pipes.done.should.not.have.been.called
+                done()
+              , 1
+        .catch done
 
 
-  describe 'process', ->
+  describe '_process', ->
     inPipeStub = null
     outPipeStub = null
     pipeline = null
@@ -131,9 +175,10 @@ describe 'Pipeline', ->
           out: '**': outPipeStub
 
       pipeline = pipelineFactory pipes: pipes
-      sinon.stub(pipeline, 'toGulpFileStream').returns true
+      sinon.stub(pipeline, '_toGulpFileStream').returns true
+      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 1, null, 99
 
-      return pipeline.process change
+      return pipeline._process change
 
     it 'should put new changes the the in pipes', (done) ->
       process(path: '/foo.bar').then ->
@@ -162,20 +207,19 @@ describe 'Pipeline', ->
     it 'should transform changes to gulp files', (done) ->
       myChange = path: '/foo.bar'
       process(myChange).then ->
-        pipeline.toGulpFileStream.should.have.been.calledOnce
-        pipeline.toGulpFileStream.should.have.been.calledWith myChange
+        pipeline._toGulpFileStream.should.have.been.calledOnce
+        pipeline._toGulpFileStream.should.have.been.calledWith myChange
         done()
       .catch done
 
     it 'should not transform out-changes to gulp files', (done) ->
       myChange = path: '/foo.bar'
       process(path: '/boo.far', wasRemoved: true).then ->
-        pipeline.toGulpFileStream.should.not.have.been.calledOnce
+        pipeline._toGulpFileStream.should.not.have.been.calledOnce
         done()
       .catch done
 
-
-  describe 'toGulpFileStream', ->
+  describe '_toGulpFileStream', ->
     dropboxClient = null
     readFileStub = null
 
@@ -186,10 +230,12 @@ describe 'Pipeline', ->
       dropboxClient =
         readFile: readFileStub
 
+      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 1, null, 99
+
     it 'should request the files content from dropbox', (done) ->
       myChange = path: '/foo.bar'
 
-      pipelineFactory(dropboxClient: dropboxClient).toGulpFileStream(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient)._toGulpFileStream(path: '/foo.bar').then ->
         readFileStub.should.have.been.called
         done()
       .catch done
@@ -199,14 +245,14 @@ describe 'Pipeline', ->
       pipes =
         in: '**': inPipeStub
 
-      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes).process(path: '/foo.bar').then ->
+      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes)._process(path: '/foo.bar').then ->
         inPipeStub.should.have.been.called
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()
       .catch done
 
   describe 'Error handling', ->
-    it 'should not get try to read folders', ->
+    it 'should not try to read folders', ->
       'implemented'.should.equal true
 
     it 'should retry operations on fail', ->

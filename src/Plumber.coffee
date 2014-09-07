@@ -15,7 +15,7 @@ class Plumber
     @pipeline = config.pipeline
 
   start: (done) ->
-    startPromise = Q.ninvoke(@database, 'get', CONSTANTS.CURSOR_TAG_KEY, true).then (cursorTag) =>
+    startPromise = Q.ninvoke(@database, 'get', CONSTANTS.CURSOR_TAG_KEY, false).then (cursorTag) =>
       deltaOptions = if cursorTag then cursorTag: cursorTag else null
 
       Q.ninvoke(@dropboxClient, 'delta', deltaOptions).then (data) =>

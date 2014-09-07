@@ -15,7 +15,7 @@
     "sinon": "~1.10.2",
     "chai": "~1.9.1",
     "sinon-chai": "~2.5.0",
-    "idkeyvalue": "0.0.3",
+    "idkeyvalue": "0.0.6",
     "express-dropbox-oauth": "0.0.7",
     "express": "~4.8.6",
     "minimist": "~1.1.0",
