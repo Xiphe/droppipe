@@ -228,7 +228,6 @@ describe 'Pipeline', ->
         done()
       .catch done
 
-
   describe '_toGulpFileStream', ->
     dropboxClient = null
     readFileStub = null
@@ -260,7 +259,3 @@ describe 'Pipeline', ->
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()
       .catch done
-
-  describe 'Error handling', ->
-    it 'should retry operations on fail', ->
-      'implemented'.should.equal true
