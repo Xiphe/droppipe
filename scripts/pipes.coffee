@@ -7,7 +7,9 @@ inPipes =
     done()
 
 outPipes =
-  '**': ->
+  '**': (file, done) ->
+    console.log "should remove #{file}"
+    done()
 
 done = -> console.log 'DONE'
 

@@ -29,6 +29,7 @@ class Pipeline
     @dropboxClient = config.dropboxClient
     @jobFailureAttempts = config.jobFailureAttempts || 5
     @jobs = kue.createQueue()
+    @jobTimeout = 1000 * (config.jobTimeout || 60)
     @queuedJobs = 0
 
   start: ->
@@ -81,11 +82,12 @@ class Pipeline
         return src
 
   _process: (change) =>
-    return Q.when true if change.stat.is_dir
-
     changePath = change.path
     relativePath = changePath.replace /^\//, ''
     direction = if change.wasRemoved then CONSTANTS.PIPE_OUT else CONSTANTS.PIPE_IN
+
+    return Q.when true if direction == CONSTANTS.PIPE_IN && change.stat.is_dir
+
     @logger.log "Start processing '#{relativePath}' -> #{direction}."
 
     pipe = false
@@ -99,8 +101,23 @@ class Pipeline
     if pipe
       Q.fcall => if direction == CONSTANTS.PIPE_IN then @_toGulpFileStream change else relativePath
         .then (change) =>
+          d = Q.defer()
+          pipeDone = false
           @logger.log "Pipe '#{changePath}' #{if CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
+
           Q.nfcall pipe, change
+            .then d.resolve, d.reject
+
+          d.promise.finally -> pipeDone = true
+
+          if @jobTimeout > 0
+            setTimeout =>
+              unless pipeDone
+                d.reject new Error "Pipe '#{changePath}' timed out after #{@jobTimeout / 1000} seconds."
+            , @jobTimeout
+
+          return d.promise
+
     else
       @logger.warn "No pipes found for '#{change.path}'."
       Q.when true
