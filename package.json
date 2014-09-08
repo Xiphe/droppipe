@@ -5,7 +5,11 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "mocha --compilers coffee:coffee-script/register -R spec",
-    "watch": "mocha --compilers coffee:coffee-script/register --watch -R spec"
+    "watch": "mocha --compilers coffee:coffee-script/register --watch -R spec",
+    "coverage": "coffee -o src/ src/ && coffee -o test/ test/ && istanbul cover node_modules/.bin/_mocha --report html -- -R spec -t 3000 -s 2000 && npm run clean",
+    "clean": "find src -iname '*.js' -delete && find test -iname '*.js' -delete",
+    "coveralls": "coffee -o src/ src/ && coffee -o test/ test/ && istanbul cover _mocha --report lcovonly -- -R spec -t 3000 -s 2000 && cat ./coverage/lcov.info | coveralls",
+    "prepublish": "rm -rf lib && coffee -o lib/ src/"
   },
   "author": "Hannes Diercks <droppipe@xiphe.net>",
   "license": "MIT",
@@ -21,7 +25,9 @@
     "minimist": "~1.1.0",
     "proxyquire": "~1.0.1",
     "lodash": "~2.4.1",
-    "gulp": "~3.8.7"
+    "gulp": "~3.8.7",
+    "istanbul": "~0.2.8",
+    "coveralls": "~2.10.0"
   },
   "dependencies": {
     "q": "~1.0.1",
