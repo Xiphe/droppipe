@@ -22,14 +22,14 @@ decrementor = (value, done) ->
   done null, value - 1
 
 class Pipeline
-  constructor: (config = {}) ->
+  constructor: (config) ->
     @pipes = config.pipes
     @logger = config.logger || console
     @database = config.database
     @dropboxClient = config.dropboxClient
     @jobFailureAttempts = config.jobFailureAttempts || 5
     @jobs = kue.createQueue()
-    @jobTimeout = 1000 * (config.jobTimeout || 60)
+    @jobTimeout = 1000 * (if typeof config.jobTimeout == 'number' then config.jobTimeout else 60)
     @queuedJobs = 0
 
   start: ->
@@ -49,7 +49,7 @@ class Pipeline
 
   _error: (err) =>
     @logger.error err
-    @pipes?.error? err
+    @pipes.error? err
 
   _preprocessor: (job, done) =>
     change = job.data.change
@@ -57,7 +57,6 @@ class Pipeline
     processingPromise = @_process change
     processingPromise.catch (err) =>
       @_error "Error while processing job('#{change.path}'): #{err}"
-      throw err
     processingPromise.then =>
       @logger.log "Finished processing job('#{change.path}')"
 
@@ -103,7 +102,7 @@ class Pipeline
         .then (change) =>
           d = Q.defer()
           pipeDone = false
-          @logger.log "Pipe '#{changePath}' #{if CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
+          @logger.log "Pipe '#{changePath}' #{if direction == CONSTANTS.PIPE_IN then 'into' else 'out of'} '#{pipeMatcher}'."
 
           Q.nfcall pipe, change
             .then d.resolve, d.reject

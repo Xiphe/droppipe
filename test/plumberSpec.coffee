@@ -99,7 +99,7 @@ describe 'Plumber', ->
         pipeline = plumber.pipeline
 
         sinon.spy pipeline, 'addJob'
-        myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md'}]
+        myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md', wasRemoved: true}]
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
 
 
@@ -109,6 +109,7 @@ describe 'Plumber', ->
           pipeline.addJob.getCall(0).args[0].change.should.equal myChanges[0]
           pipeline.addJob.getCall(1).args[0].change.should.equal myChanges[1]
           done()
+
 
       it 'should pull again if told so', (done) ->
         sinon.stub(fakeDropboxClient, 'delta')
