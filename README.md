@@ -1,6 +1,10 @@
 Droppipe
 ========
 
+[![Build Status](https://travis-ci.org/Xiphe/droppipe.svg)](https://travis-ci.org/Xiphe/droppipe)
+[![Coverage Status](https://coveralls.io/repos/Xiphe/droppipe/badge.png)](https://coveralls.io/r/Xiphe/droppipe)
+[![Dependency Status](https://david-dm.org/Xiphe/droppipe.svg)](https://david-dm.org/Xiphe/droppipe)
+
 Pipe Dropbox Delta changes to gulp
 
 
