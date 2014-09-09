@@ -13,6 +13,13 @@
   },
   "author": "Hannes Diercks <droppipe@xiphe.net>",
   "license": "MIT",
+  "repository": "git@github.com:Xiphe/droppipe.git",
+  "homepage": "https://github.com/Xiphe/droppipe",
+  "keywords": [
+    "dropbox",
+    "gulp",
+    "delta"
+  ],
   "devDependencies": {
     "coffee-script": "~1.7.1",
     "mocha": "~1.20.1",
