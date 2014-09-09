@@ -1,6 +1,6 @@
 {
   "name": "droppipe",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Pipe Dropbox Delta changes to gulp",
   "main": "lib/index.js",
   "scripts": {
