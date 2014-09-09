@@ -8,8 +8,8 @@ Droppipe
 Pipe Dropbox Delta changes to gulp
 
 
-IN DEVELOPMENT
---------------
+TODO: Documentation
+-------------------
 
 
 License
