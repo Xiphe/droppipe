@@ -65,6 +65,13 @@ describe 'Pipeline', ->
 
     console.log.should.have.been.calledWith 'Hello'
 
+  it 'should pass configuration to kue', ->
+    sinon.spy kueStub, 'createQueue'
+    myKueConfig = hello: 'Kue'
+    pipelineFactory kueConfig: myKueConfig
+
+    kueStub.createQueue.should.have.been.calledWith myKueConfig
+
   describe 'start', ->
     it 'should start a taskman worker and register the preprocessor', ->
       sinon.spy kueStub, 'createQueue'

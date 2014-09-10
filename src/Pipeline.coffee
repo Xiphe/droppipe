@@ -28,7 +28,7 @@ class Pipeline
     @database = config.database
     @dropboxClient = config.dropboxClient
     @jobFailureAttempts = config.jobFailureAttempts || 5
-    @jobs = kue.createQueue()
+    @jobs = kue.createQueue config.kueConfig || {}
     @jobTimeout = 1000 * (if typeof config.jobTimeout == 'number' then config.jobTimeout else 60)
     @queuedJobs = 0
 
