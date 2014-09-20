@@ -1,12 +1,17 @@
 describe 'Plumber', ->
   _ = require 'lodash'
   idkeyvalue = require 'idkeyvalue'
-  Plumber = require './../src/Plumber'
+  Plumber = require '../src/Plumber'
+  kueMock = require './mocks/kue'
+  pipelineFactory = require './mocks/pipeline'
+  Q = require 'q'
+
   database = null
   databaseAdapter = null
   fakeDropboxClient = null
   fakeLogger = null
   changeQueue = null
+  kueStub = null
 
   plumberFactory = (customConfig = {}) ->
     defaults =
@@ -19,6 +24,7 @@ describe 'Plumber', ->
     new Plumber config
 
   beforeEach ->
+    kueStub = pipelineFactory.kueStub
     changeQueue = []
     fakeDropboxClient =
       delta: ->
@@ -94,11 +100,11 @@ describe 'Plumber', ->
           myError.should.equal err
           done()
 
-      it 'should queue delta changes to kue', (done) ->
+      it 'should add jobs to pipeline', (done) ->
         plumber = plumberFactory()
         pipeline = plumber.pipeline
 
-        sinon.spy pipeline, 'addJob'
+        sinon.stub(pipeline, 'addJob').returns Q.all []
         myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md', wasRemoved: true}]
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
 
@@ -125,4 +131,46 @@ describe 'Plumber', ->
           plumber.start.should.have.been.calledTwice
           done()
 
+  describe 'callDone', ->
+    it 'should callDone when all jobs are done', (done) ->
+      pipes = done: (done) -> done()
+      pipeline = pipelineFactory(pipes: pipes)
+      plumber = plumberFactory(pipeline: pipeline)
+      sinon.spy(pipeline, 'callDone')
 
+      myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md', wasRemoved: true}]
+      sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
+
+      plumber.start().then ->
+        kueMock.finishAllJobs ->
+          pipeline.callDone.should.have.been.calledOnce
+          done()
+      .catch done
+
+    it 'should not notify un-existent done pipes', (done) ->
+      pipes = {}
+
+      pipeline = pipelineFactory pipes: pipes
+      sinon.stub(pipeline, '_process').returns Q.when true
+
+      pipeline.addJob change: 'hello'
+        .then ->
+          kueMock.finishAllJobs done
+        .catch done
+
+    it 'should not notify the done pipes when not finished', (done) ->
+      pipes =
+        done: sinon.spy()
+
+      pipeline = pipelineFactory pipes: pipes
+      sinon.stub(pipeline, '_process').returns Q.when true
+
+      pipeline.addJob change: 'hello'
+        .then ->
+          pipeline.addJob change: 'world'
+            .then ->
+              kueMock.finishJob 0, ->
+                pipes.done.should.not.have.been.called
+                done()
+
+        .catch done

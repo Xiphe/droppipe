@@ -1,58 +1,16 @@
 describe 'Pipeline', ->
-  proxyquire = require 'proxyquire'
-  _ = require 'lodash'
   Q = require 'q'
-  idkeyvalue = require 'idkeyvalue'
-  kueStub = {}
-  Pipeline = proxyquire '../src/Pipeline', 'kue': kueStub
+  kueStub = null
+  pipelineFactory = require './mocks/pipeline'
 
-  fakeLogger = null
-  fakeJobs = null
-  database = null
-  job = null
-  jobs = null
-  databaseAdapter = null
-  fakeJobCount = 0
+  getFakeJobs = ->
+    fakeJobs = kueStub.createQueue()
+    sinon.stub(kueStub, 'createQueue').returns fakeJobs
 
-  fakeJobFactory = ->
-    job =
-      events: {}
-      id: fakeJobCount++
-      attempts: -> job
-      save: (done) -> done?(); return job
-      on: (key, callback) -> this.events[key] = callback; return job
-
-    jobs.push job
-
-    return job
-
-  pipelineFactory = (customConfig = {}) ->
-    defaults =
-      logger: fakeLogger
-      database: databaseAdapter
-      dropboxClient: {}
-
-    config = _.merge defaults, customConfig
-    new Pipeline config
+    return fakeJobs
 
   beforeEach ->
-    job = null
-    jobs = []
-    fakeJobCount = 1
-
-    fakeLogger =
-      log: ->
-      warn: ->
-      error: ->
-
-    fakeJobs =
-      create: fakeJobFactory
-      process: ->
-
-    kueStub.createQueue = -> fakeJobs
-
-    database = {}
-    databaseAdapter = new idkeyvalue.ObjectAdapter database
+    kueStub = pipelineFactory.kueStub
 
   it 'should exist', ->
     pipelineFactory().should.exist
@@ -60,7 +18,7 @@ describe 'Pipeline', ->
   it 'should use console as default logger', ->
     sinon.spy console, 'log'
 
-    pipeline = new Pipeline database: databaseAdapter, dropboxClient: {}
+    pipeline = pipelineFactory database: pipelineFactory.databaseAdapter(), dropboxClient: {}, true
     pipeline.logger.log 'Hello'
 
     console.log.should.have.been.calledWith 'Hello'
@@ -70,33 +28,40 @@ describe 'Pipeline', ->
     myKueConfig = hello: 'Kue'
     pipelineFactory kueConfig: myKueConfig
 
+    kueStub.createQueue.should.have.been.calledOnce
     kueStub.createQueue.should.have.been.calledWith myKueConfig
 
   describe 'start', ->
-    it 'should start a taskman worker and register the preprocessor', ->
-      sinon.spy kueStub, 'createQueue'
+    it 'should start a kue worker and register the preprocessor', ->
+      fakeJobs = getFakeJobs()
       sinon.spy fakeJobs, 'process'
       pipeline = pipelineFactory()
       pipeline.start()
 
       kueStub.createQueue.should.have.been.calledOnce
       fakeJobs.process.should.have.been.calledOnce
-      fakeJobs.process.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline._preprocessor
+      fakeJobs.process.should.have.been.calledWith pipelineFactory.CONSTANTS.FILE_PROCESSOR_JOB_ID, pipeline._preprocessor
 
   describe 'addJob', ->
+    fakeJobs = null
+    myData = null
+
+    beforeEach ->
+      fakeJobs = getFakeJobs()
+      myData = change: path: 'bar'
+
     it 'should add jobs to a queue', (done) ->
       sinon.spy fakeJobs, 'create'
-      myData = foo: 'bar'
 
-      pipelineFactory().addJob(myData).finally ->
+      pipelineFactory().addJob(myData).then ->
         fakeJobs.create.should.have.been.calledOnce
-        fakeJobs.create.should.have.been.calledWith Pipeline.CONSTANTS.FILE_PROCESSOR_JOB_ID, myData
+        fakeJobs.create.should.have.been.calledWith pipelineFactory.CONSTANTS.FILE_PROCESSOR_JOB_ID, myData
         done()
+      .catch done
 
     it 'should have customizable attempts', (done) ->
       oneAttempt = 1
-      myData = foo: 'bar'
-      job = fakeJobFactory()
+      job = fakeJobs.create()
       sinon.spy job, 'attempts'
       sinon.stub(fakeJobs, 'create').returns job
 
@@ -106,33 +71,17 @@ describe 'Pipeline', ->
         done()
       .catch done
 
-
-    it 'should update the active job count in database', (done) ->
-      myPreviousCount = 7
-      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 2, null, myPreviousCount
-      sinon.spy(databaseAdapter, 'set')
-      myData = foo: 'bar'
-
-      pipelineFactory().addJob(myData).then ->
-        databaseAdapter.get.should.have.been.calledOnce
-        databaseAdapter.set.should.have.been.calledOnce
-        databaseAdapter.get.should.have.been.calledWith Pipeline.CONSTANTS.ACTIVE_JOBS_KEY
-        databaseAdapter.set.should.have.been.calledWith Pipeline.CONSTANTS.ACTIVE_JOBS_KEY, myPreviousCount + 1
-        done()
-      .catch done
-
     it 'should log errors occurred during job creation', (done) ->
       myError = new Error 'Lorem Ipsum'
-      myData = foo: 'bar'
       sinon.stub(fakeJobs, 'create').throws myError
-      sinon.spy(fakeLogger, 'error')
       error = null
 
       pipeline = pipelineFactory(pipes: {})
+      sinon.spy(pipeline.logger, 'error')
 
       pipeline.addJob(myData).catch (err) ->
         myError.should.equal err
-        fakeLogger.error.should.have.been.calledOnce
+        pipeline.logger.error.should.have.been.calledOnce
         done()
         throw err
       .then -> done new Error "promise resolved"
@@ -140,7 +89,6 @@ describe 'Pipeline', ->
 
     it 'should pass errors to pipeline error callback', (done) ->
       myError = new Error 'Lorem Ipsum'
-      myData = foo: 'bar'
       sinon.stub(fakeJobs, 'create').throws myError
       error = null
       pipes = error: sinon.spy()
@@ -167,52 +115,6 @@ describe 'Pipeline', ->
         pipeline._process.should.have.been.calledOnce
         pipeline._process.getCall(0).args[0].should.equal fakeJob.data.change
         done()
-
-    it 'should notify the done pipes when finished', (done) ->
-      pipes =
-        done: sinon.spy()
-
-      pipeline = pipelineFactory pipes: pipes
-      sinon.stub(pipeline, '_process').returns Q.when true
-
-      pipeline.addJob change: 'hello'
-        .then ->
-          job.events.complete()
-          setTimeout ->
-            pipes.done.should.have.been.called
-            done()
-          , 0
-        .catch done
-
-    it 'should not notify un-existent done pipes', (done) ->
-      pipes = {}
-
-      pipeline = pipelineFactory pipes: pipes
-      sinon.stub(pipeline, '_process').returns Q.when true
-
-      pipeline.addJob change: 'hello'
-        .then ->
-          job.events.complete()
-          setTimeout done, 0
-        .catch done
-
-    it 'should not notify the done pipes when not finished', (done) ->
-      pipes =
-        done: sinon.spy()
-
-      pipeline = pipelineFactory pipes: pipes
-      sinon.stub(pipeline, '_process').returns Q.when true
-
-      pipeline.addJob change: 'hello'
-        .then ->
-          pipeline.addJob change: 'world'
-            .then ->
-              job.events.complete()
-              setTimeout ->
-                pipes.done.should.not.have.been.called
-                done()
-              , 1
-        .catch done
 
     it 'should pass any error to done callback', (done) ->
       myError = new Error 'Fup'
@@ -255,7 +157,6 @@ describe 'Pipeline', ->
 
       pipeline = pipelineFactory pipes: pipes, jobTimeout: timeout
       sinon.stub(pipeline, '_toGulpFileStream').returns true
-      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 1, null, 99
 
       return pipeline._process change
 
@@ -341,8 +242,6 @@ describe 'Pipeline', ->
       dropboxClient =
         readFile: readFileStub
 
-      sinon.stub(databaseAdapter, 'get').callsArgWithAsync 1, null, 99
-
     it 'should request the files content from dropbox', (done) ->
       myChange = path: '/foo.bar', stat: {}
 
@@ -374,4 +273,25 @@ describe 'Pipeline', ->
           done()
 
       .catch done
+
+  describe 'callDone', ->
+    it 'should call piplines done callback if present', (done) ->
+      pipes =
+        done: (done) -> done()
+
+      sinon.spy(pipes, 'done')
+
+      pipelineFactory(pipes: pipes).callDone().then ->
+        pipes.done.should.have.been.calledOnce
+        done()
+      .catch done
+
+    it 'should not fail when no done callback is present', (done) ->
+      pipelineFactory(pipes: {}).callDone().then ->
+        done()
+      .catch done
+
+
+
+
 

@@ -1,7 +1,7 @@
 Q = require 'q'
 
 ### @const ###
-PREFIX = 'dropbox-plumber-'
+PREFIX = 'droppipe-plumber-'
 
 ### @const ###
 CONSTANTS =
@@ -19,8 +19,8 @@ class Plumber
       deltaOptions = if cursorTag then cursorTag: cursorTag else null
 
       Q.ninvoke(@dropboxClient, 'delta', deltaOptions).then (data) =>
-        @saveCursorTag(data.cursorTag)
-          .then => @queueFileChanges data.changes
+        @queueFileChanges(data.changes)
+          .then => @saveCursorTag data.cursorTag
           .then => if data.shouldPullAgain then @start()
 
     startPromise.nodeify done if done
@@ -32,11 +32,28 @@ class Plumber
 
   queueFileChanges: (changes) ->
     unless changes?.length
-      return  @logger.log "no delta changes."
+      @logger.log "no delta changes."
+      return Q.all []
+
+    queue = []
+    doneQueue = []
 
     changes.forEach (change) =>
-      @pipeline.addJob change: change
-      @logger.log "Queued #{if change.wasRemoved then 'removing' else 'update'} of '#{change.path}'."
+      promise = @pipeline.addJob(change: change)
+      queue.push promise
+      promise.then (job) ->
+        doneQueue.push job.done
+
+    return Q.all(queue).then =>
+      Q.all(doneQueue).then =>
+        @logger.log('ALL JOBS DONE, CALLING DONE')
+        @pipeline.callDone()
+          .then => @logger.log('DONE CALLBACK IS DONE :)')
+      .catch (err) =>
+        @pipeline._error(err)
+
+      @logger.log('ALL JOBS ADDED')
+
 
 Plumber.CONSTANTS = CONSTANTS
 module.exports = Plumber

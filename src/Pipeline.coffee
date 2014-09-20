@@ -5,7 +5,7 @@ gutil = require "gulp-util"
 Q = require 'q'
 
 ### @const ###
-PREFIX = 'dropbox-plumber-'
+PREFIX = 'droppipe-pipeline-'
 
 ### @const ###
 CONSTANTS =
@@ -13,13 +13,6 @@ CONSTANTS =
   FILE_PROCESSOR_JOB_ID: PREFIX + 'file-processor'
   PIPE_IN: 'in'
   PIPE_OUT: 'out'
-
-
-incrementor = (value, done) ->
-  done null, value + 1
-
-decrementor = (value, done) ->
-  done null, value - 1
 
 class Pipeline
   constructor: (config) ->
@@ -37,14 +30,22 @@ class Pipeline
     @logger.log "Job processor started."
 
   addJob: (data, attempts = @jobFailureAttempts) ->
+    jobData =
+      queid: @queuedJobs++
+      path: data.change.path
+      d: Q.defer()
+      toString: ->
+        "job##{@queid}(#{@path})"
+
+    jobData.done = @_jobDone jobData
+
     Q.invoke @jobs, 'create', CONSTANTS.FILE_PROCESSOR_JOB_ID, data
       .then (job) => job.attempts(attempts)
-      .then (job) => job.save()
-      .then (job) => job.on('complete', @_jobDone).on 'failed', @_jobDone
-      .then => Q.ninvoke @database, 'update', CONSTANTS.ACTIVE_JOBS_KEY, 0, incrementor
-      .then => @logger.log "Created job"
+      .then (job) => job.on('complete', jobData.done).on 'failed', jobData.done
+      .then (job) => job.save();
+      .then => @logger.log "Created #{jobData}"; return done: jobData.d.promise;
       .catch (err) =>
-        @_error "Failed to create job - #{err}"
+        @_error "Failed to create #{jobData} - #{err}"
         throw err
 
   _error: (err) =>
@@ -121,9 +122,16 @@ class Pipeline
       @logger.warn "No pipes found for '#{change.path}'."
       Q.when true
 
-  _jobDone: =>
-    Q.ninvoke @database, 'update', CONSTANTS.ACTIVE_JOBS_KEY, decrementor
-      .then (activeJobs) => @pipes.done?() if activeJobs == 0
+  callDone: =>
+    if @pipes.done
+      Q.ninvoke(@pipes, 'done')
+    else
+      Q.all []
+
+  _jobDone: (job) =>
+    return =>
+      @logger.log("DONE: #{job}");
+      job.d.resolve();
 
 Pipeline.CONSTANTS = CONSTANTS
 module.exports = Pipeline
