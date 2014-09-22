@@ -48,7 +48,7 @@ describe 'Pipeline', ->
 
     beforeEach ->
       fakeJobs = getFakeJobs()
-      myData = change: path: 'bar'
+      myData = change: path: 'bar', stat: path: 'bar'
 
     it 'should add jobs to a queue', (done) ->
       sinon.spy fakeJobs, 'create'
@@ -161,14 +161,14 @@ describe 'Pipeline', ->
       return pipeline._process change
 
     it 'should put new changes the the in pipes', (done) ->
-      process(path: '/foo.bar', stat: {}).then ->
+      process(path: '/foo.bar', stat: {path: '/foo.bar'}).then ->
         inPipeStub.should.have.been.calledOnce
         done()
       .catch done
 
     it 'should put removed changes to the out pipe', (done) ->
       relativeFile = 'boo.far'
-      process(path: "/#{relativeFile}", wasRemoved: true, stat: {}).then ->
+      process(path: "/#{relativeFile}", wasRemoved: true, stat: {path: "/#{relativeFile}"}).then ->
         outPipeStub.should.have.been.calledOnce
         outPipeStub.should.have.been.calledWith relativeFile
         done()
@@ -179,13 +179,13 @@ describe 'Pipeline', ->
       pipes =
         in: '*.coffee': coffeeSpy
 
-      process({path: '/asdf.js', stat: {}}, pipes).then ->
+      process({path: '/asdf.js', stat: {path: '/asdf.js'}}, pipes).then ->
         coffeeSpy.should.not.have.been.called
         done()
       .catch done
 
     it 'should transform changes to gulp files', (done) ->
-      myChange = path: '/foo.bar', stat: {}
+      myChange = path: '/foo.bar', stat: {path: '/foo.bar'}
       process(myChange).then ->
         pipeline._toGulpFileStream.should.have.been.calledOnce
         pipeline._toGulpFileStream.should.have.been.calledWith myChange
@@ -193,7 +193,7 @@ describe 'Pipeline', ->
       .catch done
 
     it 'should not transform out-changes to gulp files', (done) ->
-      process(path: '/boo.far', wasRemoved: true, stat: {}).then ->
+      process(path: '/boo.far', wasRemoved: true, stat: {path: '/boo.far'}).then ->
         pipeline._toGulpFileStream.should.not.have.been.calledOnce
         done()
       .catch done
@@ -201,7 +201,7 @@ describe 'Pipeline', ->
     it 'should not process folders', (done) ->
       myChange =
         path: '/foo/bar'
-        stat: is_dir: true
+        stat: is_dir: true, path: '/foo/bar'
 
       process(myChange).then ->
         pipeline._toGulpFileStream.should.not.have.been.called
@@ -213,7 +213,7 @@ describe 'Pipeline', ->
       pipes =
         in: '**': ->
 
-      process({path: '/foo.bar', stat: {}}, pipes).catch (err) ->
+      process({path: '/foo.bar', stat: {path: '/foo.bar'}}, pipes).catch (err) ->
         expectedErr = err
         err.message.should.contain 'timed out'
         done()
@@ -226,7 +226,7 @@ describe 'Pipeline', ->
       pipes =
         in: '**': (change, done) -> setTimeout done, 6
 
-      process({path: '/foo.bar', stat: {}}, pipes, 0).then done
+      process({path: '/foo.bar', stat: {path: '/foo.bar'}}, pipes, 0).then done
       .catch done
 
   describe '_toGulpFileStream', ->
@@ -243,7 +243,7 @@ describe 'Pipeline', ->
         readFile: readFileStub
 
     it 'should request the files content from dropbox', (done) ->
-      myChange = path: '/foo.bar', stat: {}
+      myChange = path: '/foo.bar', stat: {path: '/foo.bar'}
 
       pipelineFactory(dropboxClient: dropboxClient)._toGulpFileStream(myChange).then ->
         readFileStub.should.have.been.called
@@ -255,14 +255,14 @@ describe 'Pipeline', ->
       pipes =
         in: '**': inPipeStub
 
-      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes)._process(path: '/foo.bar', stat: {}).then ->
+      pipelineFactory(dropboxClient: dropboxClient, pipes: pipes)._process(path: '/foo.bar', stat: {path: '/foo.bar'}).then ->
         inPipeStub.should.have.been.called
         inPipeStub.getCall(0).args[0].pipe.should.be.an.instanceof Function
         done()
       .catch done
 
     it 'should create a readable stream containing a gulp file', (done) ->
-      myChange = path: '/foo.bar', stat: {}
+      myChange = path: '/foo.bar', stat: {path: '/foo.bar'}
 
       pipelineFactory(dropboxClient: dropboxClient)._toGulpFileStream(myChange).then (stream) ->
         bufs = []

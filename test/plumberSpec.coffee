@@ -29,6 +29,7 @@ describe 'Plumber', ->
     fakeDropboxClient =
       delta: ->
       credentials: ->
+      metadata: ->
     database = {}
     databaseAdapter = new idkeyvalue.ObjectAdapter database
     fakeLogger =
@@ -105,8 +106,9 @@ describe 'Plumber', ->
         pipeline = plumber.pipeline
 
         sinon.stub(pipeline, 'addJob').returns Q.all []
-        myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md', wasRemoved: true}]
+        myChanges = [{path: 'bar.txt', stat: {path: 'Bar.txt'}}, {path: 'ipsum.md', wasRemoved: true}]
         sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
+        sinon.stub(fakeDropboxClient, 'metadata').callsArgWithAsync 1, null, [{path: 'Ipsum.md'}]
 
 
         plumber.start (err) ->
@@ -138,8 +140,9 @@ describe 'Plumber', ->
       plumber = plumberFactory(pipeline: pipeline)
       sinon.spy(pipeline, 'callDone')
 
-      myChanges = [{path: 'bar.txt'}, {path: 'ipsum.md', wasRemoved: true}]
+      myChanges = [{path: 'bar.txt', stat: {path: 'Bar.txt'}}, {path: 'ipsum.md', wasRemoved: true}]
       sinon.stub(fakeDropboxClient, 'delta').callsArgWithAsync 1, null, {cursorTag: 'baz', changes: myChanges}
+      sinon.stub(fakeDropboxClient, 'metadata').callsArgWithAsync 1, null, [{path: 'Ipsum.md'}]
 
       plumber.start().then ->
         kueMock.finishAllJobs ->
@@ -153,7 +156,7 @@ describe 'Plumber', ->
       pipeline = pipelineFactory pipes: pipes
       sinon.stub(pipeline, '_process').returns Q.when true
 
-      pipeline.addJob change: 'hello'
+      pipeline.addJob change: path: 'foo.md', stat: path: 'foo.md'
         .then ->
           kueMock.finishAllJobs done
         .catch done
@@ -165,9 +168,9 @@ describe 'Plumber', ->
       pipeline = pipelineFactory pipes: pipes
       sinon.stub(pipeline, '_process').returns Q.when true
 
-      pipeline.addJob change: 'hello'
+      pipeline.addJob change: path: 'hello.md', stat: path: 'hello.md'
         .then ->
-          pipeline.addJob change: 'world'
+          pipeline.addJob change: path: 'world.md', stat: path: 'world.md'
             .then ->
               kueMock.finishJob 0, ->
                 pipes.done.should.not.have.been.called

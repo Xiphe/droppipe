@@ -19,7 +19,8 @@ class Plumber
       deltaOptions = if cursorTag then cursorTag: cursorTag else null
 
       Q.ninvoke(@dropboxClient, 'delta', deltaOptions).then (data) =>
-        @queueFileChanges(data.changes)
+        @getDeletedMeta(data.changes)
+          .then (changes) => @queueFileChanges(changes)
           .then => @saveCursorTag data.cursorTag
           .then => if data.shouldPullAgain then @start()
 
@@ -29,6 +30,24 @@ class Plumber
   saveCursorTag: (cursorTag) =>
     Q.ninvoke(@database, 'set', CONSTANTS.CURSOR_TAG_KEY, cursorTag)
       .then => @logger.log 'saved cursorTag.'
+
+  getDeletedMeta: (changes) ->
+    d = Q.defer()
+    unless changes?.length
+      return Q.when(changes)
+
+    queue = []
+
+    changes.forEach (change) =>
+      unless change.stat
+        queue.push Q.ninvoke(@dropboxClient, 'metadata', change.path).then (data) =>
+          change.stat = data[0];
+
+    Q.all(queue)
+      .then -> d.resolve(changes);
+      .catch d.reject
+
+    return d.promise;
 
   queueFileChanges: (changes) ->
     unless changes?.length

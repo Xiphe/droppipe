@@ -7,7 +7,6 @@ Pipeline = proxyquire '../../src/Pipeline', 'kue': kueStub
 
 beforeEach ->
   kueStub.createQueue = kueMock.createQueue
-  pipelineFactory.kueStub = kueStub
 
 pipelineFactory = (config = {}, force = false) ->
   defaults =
@@ -18,6 +17,8 @@ pipelineFactory = (config = {}, force = false) ->
   config = _.merge defaults, config unless force
 
   new Pipeline config
+
+pipelineFactory.kueStub = kueStub
 
 pipelineFactory.fakeLogger = ->
   log: ->

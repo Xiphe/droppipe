@@ -32,7 +32,7 @@ class Pipeline
   addJob: (data, attempts = @jobFailureAttempts) ->
     jobData =
       queid: @queuedJobs++
-      path: data.change.path
+      path: data.change.stat.path
       d: Q.defer()
       toString: ->
         "job##{@queid}(#{@path})"
@@ -57,21 +57,21 @@ class Pipeline
 
     processingPromise = @_process change
     processingPromise.catch (err) =>
-      @_error "Error while processing job('#{change.path}'): #{err}"
+      @_error "Error while processing job('#{change.stat.path}'): #{err}"
     processingPromise.then =>
-      @logger.log "Finished processing job('#{change.path}')"
+      @logger.log "Finished processing job('#{change.stat.path}')"
 
     processingPromise.nodeify done
     return processingPromise
 
   _toGulpFileStream: (change) =>
-    @logger.log "Fetch '#{change.path}' from dropbox."
+    @logger.log "Fetch '#{change.stat.path}' from dropbox."
 
     Q.ninvoke @dropboxClient, 'readFile', change.path, buffer: true
       .then (result) ->
         meta = result[1]
         contents = result[0]
-        return new gutil.File cwd: '', base: '', path: ".#{meta.path}", contents: contents
+        return new gutil.File cwd: '', base: '', path: ".#{change.stat.path}", contents: contents
 
       .then (gulpFile) ->
         src = stream.Readable objectMode: true
@@ -82,7 +82,7 @@ class Pipeline
         return src
 
   _process: (change) =>
-    changePath = change.path
+    changePath = change.stat.path
     relativePath = changePath.replace /^\//, ''
     direction = if change.wasRemoved then CONSTANTS.PIPE_OUT else CONSTANTS.PIPE_IN
 
@@ -119,7 +119,7 @@ class Pipeline
           return d.promise
 
     else
-      @logger.warn "No pipes found for '#{change.path}'."
+      @logger.warn "No pipes found for '#{change.stat.path}'."
       Q.when true
 
   callDone: =>
