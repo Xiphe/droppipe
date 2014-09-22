@@ -55,7 +55,6 @@ app.get '/logout', expressDropboxOAuth.logout(), (req, res) ->
   res.redirect '/'
 
 app.get '/auth', expressDropboxOAuth.doAuth(unauthRoute), (req, res) ->
-  console.log database
   res.redirect '/'
 
 app.get '/plumber', expressDropboxOAuth.checkAuth(unauthRoute), (req, res) ->
